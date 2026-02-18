@@ -6,6 +6,14 @@
 #include <chrono>
 #include <thread>
 
+#define HIT 0
+#define STAND 1
+#define DOUBLE 2
+#define SPLIT 3
+
+#define NO_MONEY 100
+#define GAME_DONE 200
+
 using namespace std;
 
 enum WinState {
@@ -65,6 +73,7 @@ vector<Card> SlowShuffleDeck(std::vector<Card> deck)
 
     return result_deck;
 }
+
 vector<Card> ShuffleDeck(std::vector<Card> deck) 
 {
     for (int i = deck.size() - 1; i > 0; --i)
@@ -179,14 +188,15 @@ struct Game {
     void Hit(Player &to)
     {
         GiveOneCard(to);
-        validOption[2] = false;
-        validOption[3] = false;
+        validOption[DOUBLE] = false;
+        validOption[SPLIT] = false;
     }
 
     void Double(Player &to)
     {
         player.balance -= player_bet;
         winning_pot += player_bet * 2;
+        player_bet *= 2;
 
         GiveOneCard(to);
         player_turn = false;
@@ -200,7 +210,7 @@ struct Game {
         to.hand[0].pop_back();
 
         GiveOneCard(player);
-        validOption[3] = false;
+        validOption[SPLIT] = false;
     }
 
     void GameView() 
@@ -278,9 +288,9 @@ struct Game {
         this_thread::sleep_for(chrono::milliseconds(200));
         cout << "2-Stand ";
         this_thread::sleep_for(chrono::milliseconds(200));
-        if (validOption[2]) cout << "3-Double ";
+        if (validOption[DOUBLE]) cout << "3-Double ";
         this_thread::sleep_for(chrono::milliseconds(200));
-        if (validOption[3]) cout << "4-Split ";
+        if (validOption[SPLIT]) cout << "4-Split ";
         cout << "\n=========================================\n";
         this_thread::sleep_for(chrono::milliseconds(300));
 
@@ -294,23 +304,23 @@ struct Game {
                     break;
         }
 
-        if(option == 1) Hit(player);
-        else if(option == 2) 
+        if(option == HIT+1) Hit(player);
+        else if(option == STAND+1) 
         {
             player_turn = false; 
             dealer_turn = true;
             dealer.hand[0][1].faceUp = 1;
         } 
-        else if(option == 3) Double(player);
-        else if(option == 4) Split(player);
+        else if(option == DOUBLE+1) Double(player);
+        else if(option == SPLIT+1) Split(player);
     }
 
     int DealerAction()
     {
         int dealerHand = HandPower(dealer);
 
-        if(dealerHand <= 16) return 0;
-        else return 1;
+        if(dealerHand <= 16) return HIT;
+        else return STAND;
     }
 
     void GameLoop()
@@ -359,9 +369,9 @@ struct Game {
             throw 200;        
         }
 
-        if(player.balance < player_bet) validOption[2] = false; 
+        if(player.balance < player_bet) validOption[DOUBLE] = false; 
         if(player.hand[0][0].power == player.hand[0][1].power)
-            validOption[3] = true;
+            validOption[SPLIT] = true;
 
         while (player_turn)
         {
@@ -429,12 +439,12 @@ struct Game {
             this_thread::sleep_for(chrono::milliseconds(1500));
 
             int dealer_option = DealerAction();
-            if(dealer_option == 0) 
+            if(dealer_option == HIT) 
             {
                 cout << "Hit\n";
                 Hit(dealer);
             }
-            else if(dealer_option == 1) 
+            else if(dealer_option == STAND) 
             {
                 cout << "Stand\n";
                 dealer_turn = false;
@@ -495,7 +505,7 @@ int main() {
             game.GameLoop();
         }
         catch(const int code) {
-            if(code == 100)
+            if(code == NO_MONEY)
             {
                 system("cls");
                 cout << "=========================================\n";
@@ -515,7 +525,7 @@ int main() {
                     cin >> game.player.balance;
                 }
             }
-            if(code == 200)
+            if(code == GAME_DONE)
             {
                 game.WinnigView();
 
