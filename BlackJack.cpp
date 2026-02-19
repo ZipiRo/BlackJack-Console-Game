@@ -229,7 +229,7 @@ struct Game {
     {
         cout << "Balance: " << player.balance << "$\n";
         cout << "=========================================\n";
-        cout << "Hand #" << player.using_hand  << " | Winning pot: " << player.hand[player.using_hand].bet_amount * 2 << "$\n";
+        cout << "Hand #" << player.using_hand + 1  << " | Winning pot: " << player.hand[player.using_hand].bet_amount * 2 << "$\n";
         cout << "=========================================\n";
         cout << "Dealer (";
         cout << HandPower(dealer); 
@@ -286,11 +286,13 @@ struct Game {
     void WinnigView() {
         system("cls");
         
+        // THE WIN RESOLVER AND WIN CHECKS NEED REVISIONS
+
         ResolveWinningHands(player);
 
         int total_winings = 0;
         
-        cout << "=========================================\n";
+        cout << "===============GAME-ENDED================\n";
         for(int i = 0; i < player.open_hands; i++)
         {   
             int result = player.hand[i].result;
@@ -298,39 +300,42 @@ struct Game {
             int bet_amount = player.hand[i].bet_amount;
             int player_hand_power = HandPower(player, i);
 
-            cout << "HAND #" << i << " | BET AMOUNT: $" << bet_amount << '\n';
+            cout << "Hand #" << i + 1 << " | Bet amount: $" << bet_amount << '\n';
 
-            cout << "DEALER: HAND-POWER: " << HandPower(dealer) << " (" << result_strings[dealer_result] << ")" << '\n';
-            cout << "PLAYER: HAND-POWER: " << player_hand_power << " (" << result_strings[result] << ")" << '\n';
-            
+            cout << "Dealer: Hand-Power: " << HandPower(dealer) << " (" << result_strings[dealer_result] << ") ";
+            ShowCards(dealer.hand[dealer.using_hand]()); cout << '\n';
+            cout << "Player: Hand-Power: " << player_hand_power << " (" << result_strings[result] << ") ";
+            ShowCards(player.hand[i]()); cout << '\n';
+
             if(result == BLACK_JACK)
             {
                 cout << "---------------BLACK-JACK----------------\n";
-                cout << "HAND WON: +$" << (bet_amount * 2) * 1.5 << '\n';
+                cout << "Hand WON x1.5: +$" << (bet_amount * 2) * 1.5 << '\n';
                 total_winings += (bet_amount * 2) * 1.5;
             }
             else if(result == WIN)
             {
-                cout << "HAND WON: +$" << bet_amount * 2 << '\n';
+                cout << "Hand WON: +$" << bet_amount * 2 << '\n';
                 total_winings += bet_amount * 2; 
             }
             else if(result == LOST)
-                cout << "HAND LOST: -$" << bet_amount << '\n';
+                cout << "Hand LOST: -$" << bet_amount << '\n';
             else if(result == BUST)
-                cout << "HAND BUST: -$" << bet_amount << '\n';
+                cout << "Hand BUSTED: -$" << bet_amount << '\n';
             else if(result == PUSH) 
             {
-                cout << "HAND PUSH: +$" << bet_amount << '\n';
+                cout << "Hand PUSHED: +$" << bet_amount << '\n';
                 total_winings += bet_amount;            
             }
                 
+            cout << '\n';
             cout << "=========================================\n";
 
             player.hand[i] = Hand();
         }
-        cout << "TOTAL WINNINGS: $" << total_winings << '\n'; 
+        cout << "Total Winnings: $" << total_winings << '\n'; 
         player.balance += total_winings;
-        cout << "BALANCE: $" << player.balance << '\n';
+        cout << "Balance: $" << player.balance << '\n';
     
         cout << "=========================================\n";
     }
@@ -340,8 +345,8 @@ struct Game {
         int option = 0; 
 
         cout << "Option: ";
-        cout << "1-Hit ";
-        cout << "2-Stand ";
+        if (player.hand[player.using_hand].validOption[HIT]) cout << "1-Hit ";
+        if (player.hand[player.using_hand].validOption[STAND]) cout << "2-Stand ";
         if (player.hand[player.using_hand].validOption[DOUBLE]) cout << "3-Double ";
         if (player.hand[player.using_hand].validOption[SPLIT]) cout << "4-Split ";
         cout << "\n=========================================\n";
@@ -367,11 +372,13 @@ struct Game {
         else return STAND;
     }
 
-    void PlaceBet()
+    void PlaceBet(int hand = -1)
     {
+        system("cls");
+        if(hand == -1) hand = player.using_hand;
         cout << "Balance: " << player.balance << "$\n";
         cout << "=========================================\n";
-        cout << "You bet: ";
+        cout << "Hand #" << hand + 1 << " Bet: ";
         
         if(player.balance <= 0)
             throw NO_MONEY;
@@ -385,16 +392,43 @@ struct Game {
         }
 
         player.balance -= player_bet;
-        player.hand[player.using_hand].bet_amount = player_bet;
-        player.hand[player.using_hand].open = true;
+        player.hand[hand].bet_amount = player_bet;
+        player.hand[hand].open = true;
+    }
+
+    void OpenHands()
+    {
+        cout << "How many hands you bet (Max 5)\n";
+        cout << "=========================================\n";
+        cout << "Hands: ";
+
+        int hands = 0;
+        while (true)
+        {
+            cin >> hands;
+            if(hands <= 5 && hands > 0)
+                break;
+        }
+
+        player.open_hands = hands;
     }
 
     void GameLoop()
     { 
-        GiveOneCard(player);
-        GiveOneCard(dealer);
-        GiveOneCard(player);
-        GiveOneCard(dealer, 0);
+        OpenHands();
+
+        for(int i = 0; i < player.open_hands; i++)
+            PlaceBet(i);
+        
+        for(int i = 0; i < 2; i++)
+        {
+            for(int j = 0; j < player.open_hands; j++)
+                GiveOneCard(player, 1, j);
+
+            GiveOneCard(dealer);
+        }
+
+        dealer.hand[0]()[1].faceUp = false;
 
         if(IsBlackJack(dealer))
         {
@@ -402,37 +436,6 @@ struct Game {
             dealer.hand[0].result = BLACK_JACK;
 
             // HERE SHOULD BE SOME KIND OF INSURANCE I THINK
-        }
-
-        for(int i = 0; i < player.open_hands; i++)
-        {
-            if(IsBlackJack(player, i))
-            {
-                player.hand[i].result = BLACK_JACK;
-                player.hand[i].open = false;
-            }
-            else if(HandPower(player, i) == 21)
-            {
-                player.hand[i].result = WIN;  
-                player.hand[i].open = false;
-            }
-        }
-        
-        if(player.open_hands < 2 && 
-            dealer.hand[0].result == BLACK_JACK)
-        {
-            system("cls");
-            GameView();
-
-            throw GAME_DONE;
-        }
-
-        if(!AnyHandOpen(player))
-        {
-            system("cls");
-            GameView();
-
-            throw GAME_DONE;
         }
 
         bool hand_closed;
@@ -459,8 +462,14 @@ struct Game {
             if(player.hand[player.using_hand].split)
                 player.hand[player.using_hand].validOption[SPLIT] = false; 
 
-            hand_closed = false;
+            if(dealer.hand[0].result == BLACK_JACK)
+                for(int i = 0; i < 4; i++)
+                {
+                    if(i == STAND) continue;
+                    player.hand[player.using_hand].validOption[i] = false;
+                }
 
+            hand_closed = false;
             while (!hand_closed)
             {
                 system("cls");
@@ -478,7 +487,8 @@ struct Game {
 
             int hand_power = HandPower(player);
 
-            if(hand_power > 21) player.hand[player.using_hand].result = BUST;
+            if(IsBlackJack(player)) player.hand[player.using_hand].result = BLACK_JACK;  
+            else if(hand_power > 21) player.hand[player.using_hand].result = BUST;
             else if(hand_power == 21) player.hand[player.using_hand].result = WIN;
             else if(hand_power < 21) player.hand[player.using_hand].result = LESS;
             
@@ -500,18 +510,19 @@ struct Game {
             else player.using_hand++;
         }
 
-        dealer_turn = true;
         dealer.hand[0]()[1].faceUp = true;
-        if(HandPower(dealer) == 21)
-        {
+        if(HandPower(dealer) == 21 && !IsBlackJack(dealer))
             dealer.hand[0].result = WIN;
-            
+
+        if(dealer.hand[0].result != -1)
+        {
             system("cls");
             GameView();
 
             throw GAME_DONE;
         }
 
+        dealer_turn = true;
         while (dealer_turn)
         {
             system("cls");
@@ -535,8 +546,8 @@ struct Game {
         
         int dealerHand = HandPower(dealer);
         if(dealerHand > 21) dealer.hand[0].result = BUST;
-        if(dealerHand == 21) dealer.hand[0].result = WIN;
-        if(dealerHand < 21) dealer.hand[0].result = LESS;
+        else if(dealerHand == 21) dealer.hand[0].result = WIN;
+        else if(dealerHand < 21) dealer.hand[0].result = LESS;
 
         throw GAME_DONE;
     }
