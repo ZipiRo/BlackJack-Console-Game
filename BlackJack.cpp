@@ -14,15 +14,17 @@
 #define NO_MONEY 100
 #define GAME_DONE 200
 
+#define BLACK_JACK 1
+#define WIN 2
+#define LOST 3
+#define PUSH 4
+
+#define BUST 5
+#define LESS 6
+
 using namespace std;
 
-enum WinState {
-    Lost,
-    Bust,
-    Win,
-    Push,
-    BlackJack
-};
+string result_strings[10] = {"", "BLACK-JACK", "WIN", "LOST", "PUSH", "BUST"};
 
 string card_type[4] = {"Hearts", "Tiles", "Clovers", "Pikes"};
 string card_name[13] = {"Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King"};
@@ -92,7 +94,6 @@ void ShowCards(vector<Card> cards)
         if(card.faceUp == 0) 
         {
             cout << "FaceDown "; 
-            this_thread::sleep_for(chrono::milliseconds(300));
             continue; 
         
         }
@@ -100,15 +101,31 @@ void ShowCards(vector<Card> cards)
 
         cout << card.name << '-' ;        
         cout << card.type << ' '; 
-        
-        this_thread::sleep_for(chrono::milliseconds(300));
     }
 }
 
+struct Hand
+{
+    vector<Card> cards;
+    int result = -1;
+    int dealer_result = -1;
+    int bet_amount = 0; 
+    bool open = false; 
+    bool validOption[4] = { true, true, true, true };
+    bool split = false;
+
+    vector<Card> &operator() (){
+        return cards;
+    }
+};
+
+const int MAX_HANDS = 50;
+
 struct Player
 {
-    vector<Card> hand[2];
+    vector<Hand> hand = vector<Hand>(MAX_HANDS);
     int using_hand = 0;
+    int open_hands = 1;
 
     int balance = 0;
 };
@@ -118,26 +135,24 @@ struct Game {
     Player dealer;
     Player player;
 
-    int winning_pot = 0;
-    int win_result = -1;
-    int player_turn = false;
     int dealer_turn = false;
-    bool validOption[4] = { true, true, true, false };
-    int player_bet = 0;
+    bool splited = false;
 
-    void GiveOneCard(Player &to, int faceUp = 1)
+    void GiveOneCard(Player &to, int faceUp = 1, int hand = -1)
     {
+        if(hand == -1) hand = to.using_hand;
         Card draw_card = deck.back();
         deck.pop_back();
 
         draw_card.faceUp = faceUp;
-        to.hand[to.using_hand].push_back(draw_card);
+        to.hand[hand]().push_back(draw_card);
     }
 
-    int HandPower(Player to) 
+    int HandPower(Player &to, int hand = -1) 
     {
+        if(hand == -1) hand = to.using_hand;
         int hand_power = 0;
-        for(auto card : to.hand[to.using_hand])
+        for(auto card : to.hand[hand]())
         {
             if(!card.faceUp) continue;
             
@@ -151,148 +166,185 @@ struct Game {
 
         return hand_power;
     }
-    
-    int IsBlackJack(Player to)
-    {
-        if(to.hand[to.using_hand].size() < 2) return false;
 
-        bool ace = to.hand[0][0].name == "Ace" || to.hand[0][1].name == "Ace";
-        bool ten = to.hand[0][0].power == 10 || to.hand[0][1].power == 10;
+    bool AnyHandOpen(Player &of)
+    {
+        for(auto hand : of.hand)
+            if(hand.open)
+                return true;
+        
+        return false;
+    }
+    
+    int IsBlackJack(Player &to, int hand = -1)
+    {
+        if(hand == -1) hand = to.using_hand;
+        if(to.hand[to.using_hand]().size() < 2) return false;
+
+        bool ace = to.hand[hand]()[0].name == "Ace" || to.hand[hand]()[1].name == "Ace";
+        bool ten = to.hand[hand]()[0].power == 10 || to.hand[hand]()[1].power == 10;
 
         return ace && ten;
     }
 
-    void PlaceBet()
-    {
-        cout << "Balance: " << player.balance << "$\n";
-        this_thread::sleep_for(chrono::milliseconds(300));
-        cout << "=========================================\n";
-        this_thread::sleep_for(chrono::milliseconds(300));
-        cout << "You bet: ";
-        
-        if(player.balance <= 0)
-            throw 100;
-
-        while (true)
-        {
-            cin >> player_bet;
-            if(player_bet <= player.balance && player_bet > 0)
-                break;
-        }
-
-        player.balance -= player_bet;
-        winning_pot = player_bet * 2;
-        player_turn = true;
-    }
-
     void Hit(Player &to)
     {
+        to.hand[to.using_hand].validOption[DOUBLE] = false;
+        to.hand[to.using_hand].validOption[SPLIT] = false;
+
         GiveOneCard(to);
-        validOption[DOUBLE] = false;
-        validOption[SPLIT] = false;
     }
 
     void Double(Player &to)
     {
-        player.balance -= player_bet;
-        winning_pot += player_bet * 2;
-        player_bet *= 2;
+        to.balance -= to.hand[to.using_hand].bet_amount;
+        to.hand[to.using_hand].bet_amount *= 2;
 
         GiveOneCard(to);
-        player_turn = false;
-        dealer_turn = true;
     }
 
     void Split(Player &to)
     {
-        // Needs Work
-        to.hand[1].push_back(to.hand[0].back());
-        to.hand[0].pop_back();
+        to.hand[to.using_hand].validOption[SPLIT] = false;
+        int hand_bet_amount = to.hand[to.using_hand].bet_amount;
+        
+        to.open_hands++;
+        int splited_hand = to.open_hands - 1; 
+        to.balance -= hand_bet_amount; 
+        to.hand[splited_hand].bet_amount = hand_bet_amount;
+        to.hand[splited_hand]().push_back(to.hand[to.using_hand]()[1]);
+        to.hand[splited_hand].open = true;
+        to.hand[splited_hand].split = true;
 
-        GiveOneCard(player);
-        validOption[SPLIT] = false;
+
+        to.hand[to.using_hand]().pop_back();
+
+        GiveOneCard(to, 1, to.using_hand);
+        GiveOneCard(to, 1, splited_hand);
+
+        splited = true;
     }
 
     void GameView() 
     {
         cout << "Balance: " << player.balance << "$\n";
-        this_thread::sleep_for(chrono::milliseconds(100));
         cout << "=========================================\n";
-        this_thread::sleep_for(chrono::milliseconds(100));
-        cout << "Winning pot: " << winning_pot << "$\n";
-        this_thread::sleep_for(chrono::milliseconds(100));
+        cout << "Hand #" << player.using_hand  << " | Winning pot: " << player.hand[player.using_hand].bet_amount * 2 << "$\n";
         cout << "=========================================\n";
-        this_thread::sleep_for(chrono::milliseconds(100));
         cout << "Dealer (";
         cout << HandPower(dealer); 
-        cout << "): "; ShowCards(dealer.hand[dealer.using_hand]); cout << '\n';
-        this_thread::sleep_for(chrono::milliseconds(100));
+        cout << "): "; ShowCards(dealer.hand[dealer.using_hand]()); cout << '\n';
         cout << "Player (";
         cout << HandPower(player); 
-        cout << "): "; ShowCards(player.hand[player.using_hand]); cout << '\n';
+        cout << "): "; ShowCards(player.hand[player.using_hand]()); cout << '\n';
         cout << "=========================================\n";
+    }
+
+    void ResolveWinningHands(Player &of)
+    {
+        int win_result = -1;
+        int dealer_result = dealer.hand[0].result;
+        int dealer_hand_power = HandPower(dealer);
+        
+        for(int i = 0; i < of.open_hands; i++)
+        {
+            int player_result = of.hand[i].result;
+            int player_hand_power = HandPower(of, i);
+            
+            if(player_result == dealer_result)
+            {
+                if(player_result == LESS)
+                {
+                    if(player_hand_power < dealer_hand_power)
+                        win_result = LOST;
+                    else if(player_hand_power > dealer_hand_power)
+                        win_result = WIN;
+                    else win_result = PUSH;
+                }
+                else if(player_result == BUST) win_result = BUST;
+                else win_result = PUSH;
+            }
+            else if(dealer_result == BLACK_JACK) win_result = LOST;
+            else if(player_result == BLACK_JACK) win_result = BLACK_JACK;
+            else if(player_result == WIN) win_result = WIN;
+            else if(player_result == BUST) win_result = BUST;
+            else if(player_result == LESS)
+            {
+                if(dealer_result == BUST) win_result = WIN;
+                else if (dealer_result == WIN) win_result = LOST;
+            }
+
+            of.hand[i].result = win_result;
+            
+            if(dealer_result == BLACK_JACK) of.hand[i].dealer_result = BLACK_JACK; 
+            else if(win_result == LOST || win_result == BUST) of.hand[i].dealer_result = WIN;
+            else if(win_result == WIN || win_result == BLACK_JACK) of.hand[i].dealer_result = LOST;
+            else of.hand[i].dealer_result = PUSH;
+        }
     }
 
     void WinnigView() {
         system("cls");
-        cout << "=========================================\n";
-        this_thread::sleep_for(chrono::milliseconds(300));
-        if(win_result == WinState::Win)
-        {
-            player.balance += winning_pot;
-            cout << "You Won: " << player_bet << "$\n";
-            this_thread::sleep_for(chrono::milliseconds(300));
-            cout << "Balance: " << player.balance << "$\n";
-        }   
-        else if(win_result == WinState::Lost)
-        {
-            cout << "You Lost: " << player_bet << "$\n";
-            this_thread::sleep_for(chrono::milliseconds(300));
-            cout << "Balance: " << player.balance << "$\n";
-        } 
-        else if(win_result == WinState::Bust)
-        {
-            cout << "You Lost (Bust): " << player_bet << "$\n";
-            this_thread::sleep_for(chrono::milliseconds(300));
-            cout << "Balance: " << player.balance << "$\n";
-        }
-        else if(win_result == WinState::Push)
-        {
-            player.balance += player_bet;
-            cout << "Push\n";
-            this_thread::sleep_for(chrono::milliseconds(300));
-            cout << "Balance: " << player.balance << "$\n";
-        }
-        else if(win_result == WinState::BlackJack)
-        {
-            player.balance += winning_pot * 1.5;
+        
+        ResolveWinningHands(player);
 
-            cout << "You Won (BlackJack): " << player_bet * 1.5 << "\n";
-            this_thread::sleep_for(chrono::milliseconds(300));
-            cout << "Balance: " << player.balance << "$\n";
-        }
+        int total_winings = 0;
+        
         cout << "=========================================\n";
+        for(int i = 0; i < player.open_hands; i++)
+        {   
+            int result = player.hand[i].result;
+            int dealer_result = player.hand[i].dealer_result;
+            int bet_amount = player.hand[i].bet_amount;
+            int player_hand_power = HandPower(player, i);
 
-        dealer.hand[0].clear();
-        player.hand[0].clear();
-        player.hand[1].clear();
+            cout << "HAND #" << i << " | BET AMOUNT: $" << bet_amount << '\n';
+
+            cout << "DEALER: HAND-POWER: " << HandPower(dealer) << " (" << result_strings[dealer_result] << ")" << '\n';
+            cout << "PLAYER: HAND-POWER: " << player_hand_power << " (" << result_strings[result] << ")" << '\n';
+            
+            if(result == BLACK_JACK)
+            {
+                cout << "---------------BLACK-JACK----------------\n";
+                cout << "HAND WON: +$" << (bet_amount * 2) * 1.5 << '\n';
+                total_winings += (bet_amount * 2) * 1.5;
+            }
+            else if(result == WIN)
+            {
+                cout << "HAND WON: +$" << bet_amount * 2 << '\n';
+                total_winings += bet_amount * 2; 
+            }
+            else if(result == LOST)
+                cout << "HAND LOST: -$" << bet_amount << '\n';
+            else if(result == BUST)
+                cout << "HAND BUST: -$" << bet_amount << '\n';
+            else if(result == PUSH) 
+            {
+                cout << "HAND PUSH: +$" << bet_amount << '\n';
+                total_winings += bet_amount;            
+            }
+                
+            cout << "=========================================\n";
+
+            player.hand[i] = Hand();
+        }
+        cout << "TOTAL WINNINGS: $" << total_winings << '\n'; 
+        player.balance += total_winings;
+        cout << "BALANCE: $" << player.balance << '\n';
+    
+        cout << "=========================================\n";
     }
 
-    void PlayerActionView()
-    {
+    int PlayerOptionView()
+    {       
         int option = 0; 
 
-        cout << "Action: ";
-        this_thread::sleep_for(chrono::milliseconds(200));
+        cout << "Option: ";
         cout << "1-Hit ";
-        this_thread::sleep_for(chrono::milliseconds(200));
         cout << "2-Stand ";
-        this_thread::sleep_for(chrono::milliseconds(200));
-        if (validOption[DOUBLE]) cout << "3-Double ";
-        this_thread::sleep_for(chrono::milliseconds(200));
-        if (validOption[SPLIT]) cout << "4-Split ";
+        if (player.hand[player.using_hand].validOption[DOUBLE]) cout << "3-Double ";
+        if (player.hand[player.using_hand].validOption[SPLIT]) cout << "4-Split ";
         cout << "\n=========================================\n";
-        this_thread::sleep_for(chrono::milliseconds(300));
 
         while (true)
         {
@@ -300,19 +352,11 @@ struct Game {
             cin >> option;
             
             if(option > 0 && option <= 4)
-                if(validOption[option - 1])
+                if(player.hand[player.using_hand].validOption[option - 1])
                     break;
         }
 
-        if(option == HIT+1) Hit(player);
-        else if(option == STAND+1) 
-        {
-            player_turn = false; 
-            dealer_turn = true;
-            dealer.hand[0][1].faceUp = 1;
-        } 
-        else if(option == DOUBLE+1) Double(player);
-        else if(option == SPLIT+1) Split(player);
+        return option;
     }
 
     int DealerAction()
@@ -323,10 +367,30 @@ struct Game {
         else return STAND;
     }
 
+    void PlaceBet()
+    {
+        cout << "Balance: " << player.balance << "$\n";
+        cout << "=========================================\n";
+        cout << "You bet: ";
+        
+        if(player.balance <= 0)
+            throw NO_MONEY;
+
+        int player_bet = 0;
+        while (true)
+        {
+            cin >> player_bet;
+            if(player_bet <= player.balance && player_bet > 0)
+                break;
+        }
+
+        player.balance -= player_bet;
+        player.hand[player.using_hand].bet_amount = player_bet;
+        player.hand[player.using_hand].open = true;
+    }
+
     void GameLoop()
     { 
-        PlaceBet();
-        
         GiveOneCard(player);
         GiveOneCard(dealer);
         GiveOneCard(player);
@@ -334,100 +398,118 @@ struct Game {
 
         if(IsBlackJack(dealer))
         {
-            dealer.hand[0][1].faceUp = true;
-            if(IsBlackJack(player))
-                    win_result = WinState::Push;
-            else win_result = WinState::Lost;
+            dealer.hand[0]()[1].faceUp = true;
+            dealer.hand[0].result = BLACK_JACK;
 
+            // HERE SHOULD BE SOME KIND OF INSURANCE I THINK
+        }
+
+        for(int i = 0; i < player.open_hands; i++)
+        {
+            if(IsBlackJack(player, i))
+            {
+                player.hand[i].result = BLACK_JACK;
+                player.hand[i].open = false;
+            }
+            else if(HandPower(player, i) == 21)
+            {
+                player.hand[i].result = WIN;  
+                player.hand[i].open = false;
+            }
+        }
+        
+        if(player.open_hands < 2 && 
+            dealer.hand[0].result == BLACK_JACK)
+        {
             system("cls");
             GameView();
 
-            throw 200;
+            throw GAME_DONE;
         }
 
-        if(HandPower(player) == 21)
+        if(!AnyHandOpen(player))
         {
-            if(IsBlackJack(dealer))
+            system("cls");
+            GameView();
+
+            throw GAME_DONE;
+        }
+
+        bool hand_closed;
+        bool using_splitted_hand = false;
+        int last_hand_used;
+        while(player.using_hand < player.open_hands)
+        {
+            if(!player.hand[player.using_hand].open) 
             {
-                dealer.hand[0][1].faceUp = true;
-                if(HandPower(dealer) == 21) win_result = WinState::Push;
-                    else win_result = WinState::Win;
-                
+                player.using_hand++;
+                continue;
+            }
+
+            if(player.hand[player.using_hand]()[0].power == player.hand[player.using_hand]()[1].power)
+                        player.hand[player.using_hand].validOption[SPLIT] = true;
+            else player.hand[player.using_hand].validOption[SPLIT] = false;
+
+            if(player.balance < player.hand[player.using_hand].bet_amount)
+            {
+                player.hand[player.using_hand].validOption[DOUBLE] = false; 
+                player.hand[player.using_hand].validOption[SPLIT] = false; 
+            }
+
+            if(player.hand[player.using_hand].split)
+                player.hand[player.using_hand].validOption[SPLIT] = false; 
+
+            hand_closed = false;
+
+            while (!hand_closed)
+            {
                 system("cls");
                 GameView();
 
-                throw 200;
+                int option = PlayerOptionView();
+                
+                if(option == HIT+1) Hit(player);
+                else if(option == DOUBLE+1) Double(player);
+                else if(option == SPLIT+1) Split(player);
+
+                if(HandPower(player) >= 21 || option == STAND+1 || option == DOUBLE+1)
+                    hand_closed = true; 
             }
-            else win_result = WinState::Win;
 
-            if(IsBlackJack(player))
-                    win_result = WinState::BlackJack;
-                    
-            system("cls");
-            GameView();
+            int hand_power = HandPower(player);
 
-            throw 200;        
-        }
-
-        if(player.balance < player_bet) validOption[DOUBLE] = false; 
-        if(player.hand[0][0].power == player.hand[0][1].power)
-            validOption[SPLIT] = true;
-
-        while (player_turn)
-        {
-            system("cls");
-            GameView();
-            PlayerActionView();
+            if(hand_power > 21) player.hand[player.using_hand].result = BUST;
+            else if(hand_power == 21) player.hand[player.using_hand].result = WIN;
+            else if(hand_power < 21) player.hand[player.using_hand].result = LESS;
             
-            if(HandPower(player) >= 21)
+            player.hand[player.using_hand].open = false;
+            
+            if(using_splitted_hand)
             {
-                player_turn = false;  
-                dealer_turn = true; 
+                player.using_hand = last_hand_used;
+                using_splitted_hand = false;
             }
-        }
 
-        if(HandPower(player) > 21)
-        {
-            win_result = WinState::Bust;
-
-            system("cls");
-            GameView();
-
-            throw 200;      
-        }
-
-        if(HandPower(player) == 21)
-        {
-            if(IsBlackJack(dealer))
+            if(splited) 
             {
-                dealer.hand[0][1].faceUp = true;
-                if(HandPower(dealer) == 21) win_result = WinState::Push;
-                    else win_result = WinState::Win;
-                
-                system("cls");
-                GameView();
-
-                throw 200;
+                last_hand_used = player.using_hand;
+                player.using_hand = player.open_hands - 1; 
+                splited = false;
+                using_splitted_hand = true;
             }
-            else win_result = WinState::Win;
-
-            if(IsBlackJack(player))
-                    win_result = WinState::BlackJack;
-                
-            system("cls");
-            GameView();
-
-            throw 200;        
+            else player.using_hand++;
         }
 
-        if(IsBlackJack(dealer))
+        dealer_turn = true;
+        dealer.hand[0]()[1].faceUp = true;
+        if(HandPower(dealer) == 21)
         {
-            win_result = WinState::Lost;
-
+            dealer.hand[0].result = WIN;
+            
             system("cls");
             GameView();
 
-            throw 200;
+            throw GAME_DONE;
         }
 
         while (dealer_turn)
@@ -436,7 +518,6 @@ struct Game {
             GameView();
 
             cout << "Dealer Action: ";
-            this_thread::sleep_for(chrono::milliseconds(1500));
 
             int dealer_option = DealerAction();
             if(dealer_option == HIT) 
@@ -450,37 +531,14 @@ struct Game {
                 dealer_turn = false;
             }   
 
-            this_thread::sleep_for(chrono::milliseconds(1500));
         }
         
-        this_thread::sleep_for(chrono::milliseconds(1500));
         int dealerHand = HandPower(dealer);
+        if(dealerHand > 21) dealer.hand[0].result = BUST;
+        if(dealerHand == 21) dealer.hand[0].result = WIN;
+        if(dealerHand < 21) dealer.hand[0].result = LESS;
 
-        if(dealerHand > 21)
-        {
-            win_result = WinState::Win;
-            throw 200;
-        }
-
-        if(dealerHand == 21)
-        {
-            win_result = WinState::Lost;
-            throw 200;
-        }
-
-        if(dealerHand < 21)
-        {
-            int playerHand = HandPower(player);
-            
-            if(playerHand < dealerHand)
-                win_result = WinState::Lost;
-            else if(playerHand == dealerHand)
-                win_result = WinState::Push;
-            else if(playerHand > dealerHand)
-                win_result = WinState::Win;
-
-            throw 200;
-        }
+        throw GAME_DONE;
     }
 };
 
@@ -510,11 +568,8 @@ int main() {
                 system("cls");
                 cout << "=========================================\n";
                 cout << "You don't have any more money.\n";
-                this_thread::sleep_for(chrono::milliseconds(300));
                 cout << "\nDo you want to play again?\n";
-                this_thread::sleep_for(chrono::milliseconds(300));
                 cout << "No-0\n";
-                this_thread::sleep_for(chrono::milliseconds(300));
                 cout << "Option: ";
                 cin >> running; 
                 cout << '\n';
@@ -530,14 +585,14 @@ int main() {
                 game.WinnigView();
 
                 cout << "Do you want to place another bet?\n";
-                this_thread::sleep_for(chrono::milliseconds(300));
                 cout << "No-0\n";
-                this_thread::sleep_for(chrono::milliseconds(300));
                 cout << "Option: ";
                 cin >> running;
             }
 
             player = game.player;
+            player.using_hand = 0;
+            player.open_hands = 1;
         }
     }
     
