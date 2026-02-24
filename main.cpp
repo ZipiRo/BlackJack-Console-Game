@@ -391,10 +391,12 @@ void SimulatePlay(int rounds, float balance, int min_bet, int max_bet)
         blackjack_game.ApplyPlayerAction(action);
     }
 
+    out << "Balance: $" << blackjack_game.GetGameInfo().balance << '\n';   
     out << "Min balance: $" << min_balance << '\n';
     out << "Max balance: $" << max_balance << '\n';
-    out << "Rounds Played: " << rounds_played << '\n';  
+    out << "Rounds Played: " << rounds_played << '\n'; 
     
+    std::cout << "Balance: $" << blackjack_game.GetGameInfo().balance << '\n';   
     std::cout << "Min balance: $" << min_balance << '\n';
     std::cout << "Max balance: $" << max_balance << '\n';
     std::cout << "Rounds Played: " << rounds_played << '\n';  
@@ -431,8 +433,8 @@ int main(int argc, char* argv[])
         std::cout << "Command: ./program --sim [simulations] [balance] [min_bet] [max_bet]\n";
         std::cout << '\n';
         std::cout << "When the program finnishes it will output a log file 'bj_simulation.log';\n";
-        std::cout << "The log file will contain: rounds_stats, min_balance, max_balance, rounds_played;\n";
-        std::cout << "In the console you'll find the min_balance, max_balance, rounds_played;\n";
+        std::cout << "The log file will contain: rounds_stats, min_balance, max_balance, rounds_played, balance;\n";
+        std::cout << "In the console you'll find the min_balance, max_balance, rounds_played, balance;\n";
         std::cout << '\n';
         std::cout << "The simulation is using the basic cheet sheet table of BlackJack\n";
         std::cout << '\n';
