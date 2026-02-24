@@ -27,16 +27,19 @@
     I MADE A SIMULTION USING THIS CHEET SHEET SO KNOW I CAN REALY SEE HOW EFECTIVE IT IS
     TO RUN SUMULATIONS YOU NEED TO RUN THE PROGRAM IN THE COMAND PROMPT LIKE THIS
     --------------------------------------------------------------
-    COMMAND: ./program --sim [simulations] [balance] [min_bet] [max_bet]
+    COMMAND: ./program --sim [simulations] [balance] [min_bet] [max_bet] [file_name]
     --------------------------------------------------------------
-    AFTER THE SIMULATION THE PROGRAM WILL OUTPUT A FILE NAMED 'bj_simulation.log',
+    AFTER THE SIMULATION THE PROGRAM WILL OUTPUT A FILE WITH THE SAID 'file_name',
     WHERE YOU CAN FIND INFORMATION ABOUT THE SIMULATION. 
     IN THE LOG FILE YOU FIND THE ROUND INFORMATION, MIN_BALANCE, MAX_BALANCE, ROUNDS_PLAYED.
 */
 
 /*
     ADDED THE OPTION TO OUTPUT A CSV FILE FOR VISUAL STATISTICS
-    COMMAND: ./program --sim [simulations] [balance] [min_bet] [max_bet] (--csv [file_name] ) 
+    COMMAND: ./program --sim [simulations] [balance] [min_bet] [max_bet] [file_name] (--csv [file_name] ) 
+    AFTER THE SIMULATION THE PROGRAM WILL OUTPUT A LOG FILE AND A CSV FILE FITH THE SAID NAME
+    WHERE YOU CAN FIND INFORMATION ABOUT THE SIMULATION. 
+    IN THE LOG FILE YOU FIND THE ROUND INFORMATION, MIN_BALANCE, MAX_BALANCE, ROUNDS_PLAYED.
 */
 
 #include <iostream>
@@ -328,9 +331,9 @@ void AddLineToCSVFile(float balance, float min_balance, float max_balance)
     CSVFile << balance << ',' << min_balance << ',' << max_balance << '\n';
 }
 
-void SimulatePlay(int rounds, float balance, int min_bet, int max_bet)
+void SimulatePlay(int rounds, float balance, int min_bet, int max_bet, std::string file_name)
 {
-    std::ofstream out("bj_simulation.log");
+    std::ofstream out(file_name + ".log");
 
     Player player;
     player.balance = balance;
@@ -430,9 +433,9 @@ void ProgramInfo()
     std::cout << "================================================================================================\n";
     std::cout << "To simulate BlackJack rounds you need to use this command\n";
     std::cout << '\n';
-    std::cout << "Command: ./program --sim [simulations] [balance] [min_bet] [max_bet] ( --csv [file_name] )\n";
+    std::cout << "Command: ./program --sim [simulations] [balance] [min_bet] [max_bet] [file_name] ( --csv [file_name] )\n";
     std::cout << '\n';
-    std::cout << "When the program finnishes it will output a log file 'bj_simulation.log';\n";
+    std::cout << "When the program finnishes it will output a log file: file_name;\n";
     std::cout << "The log file will contain: rounds_stats, min_balance, max_balance, rounds_played, balance;\n";
     std::cout << "In the console you'll find the min_balance, max_balance, rounds_played, balance;\n";
     std::cout << '\n';
@@ -457,14 +460,14 @@ int main(int argc, char* argv[])
         return 0;
     }
 
-    if(strstr(argv[1], "--sim") && argc >= 6)
+    if(strstr(argv[1], "--sim") && argc >= 7)
     {
-        if(argc >= 8 && strstr(argv[6], "--csv"))
+        if(argc >= 9 && strstr(argv[7], "--csv"))
         {    
             use_CSV_file = true;
-            CreateCSVFile(argv[7]);      
+            CreateCSVFile(argv[8]);      
         }
-        else if(argc >= 7)
+        else if(argc >= 8)
         {
             ProgramInfo();
             return 1;
@@ -474,8 +477,9 @@ int main(int argc, char* argv[])
         int balance = std::stoi(argv[3]);
         int min_bet = std::stoi(argv[4]);
         int max_bet = std::stoi(argv[5]);
+        std::string file_name = argv[6];
 
-        SimulatePlay(simulations, balance, min_bet, max_bet);
+        SimulatePlay(simulations, balance, min_bet, max_bet, file_name);
 
         return 0;
     }
